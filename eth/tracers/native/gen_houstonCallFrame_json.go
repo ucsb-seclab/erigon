@@ -18,25 +18,27 @@ var _ = (*houstonCallFrameMarshaling)(nil)
 func (h houstonCallFrame) MarshalJSON() ([]byte, error) {
 	type houstonCallFrame0 struct {
 		Id         uint64             `json:"id"`
+		EventId    uint64             `json:"event_id"`
 		Type       vm.OpCode          `json:"-"`
 		From       common.Address     `json:"from"`
 		Gas        hexutil.Uint64     `json:"gas"`
 		GasUsed    hexutil.Uint64     `json:"gasUsed"`
-		To         common.Address     `json:"to,omitempty" rlp:"optional"`
+		To         common.Address     `json:"to" rlp:"optional"`
 		Input      hexutility.Bytes   `json:"input" rlp:"optional"`
 		Output     hexutility.Bytes   `json:"output,omitempty" rlp:"optional"`
 		Error      string             `json:"error,omitempty" rlp:"optional"`
 		Revertal   string             `json:"revertReason,omitempty"`
-		Calls      []houstonCallFrame `json:"calls,omitempty" rlp:"optional"`
+		Calls      []houstonCallFrame `json:"calls" rlp:"optional"`
 		Logs       []houstonCallLog   `json:"logs,omitempty" rlp:"optional"`
 		Pc         uint64             `json:"pc,omitempty" rlp:"optional"`
-		SvsEntry   []SV               `json:"svs_entry,omitempty" rlp:"optional"`
-		SvsExit    []SV               `json:"svs_exit,omitempty" rlp:"optional"`
+		SvsEntry   []SV               `json:"svs_entry" rlp:"optional"`
+		SvsExit    []SV               `json:"svs_exit" rlp:"optional"`
 		Value      *hexutil.Big       `json:"value,omitempty" rlp:"optional"`
 		TypeString string             `json:"type"`
 	}
 	var enc houstonCallFrame0
 	enc.Id = h.Id
+	enc.EventId = h.EventId
 	enc.Type = h.Type
 	enc.From = h.From
 	enc.Gas = hexutil.Uint64(h.Gas)
@@ -60,20 +62,21 @@ func (h houstonCallFrame) MarshalJSON() ([]byte, error) {
 func (h *houstonCallFrame) UnmarshalJSON(input []byte) error {
 	type houstonCallFrame0 struct {
 		Id       *uint64            `json:"id"`
+		EventId  *uint64            `json:"event_id"`
 		Type     *vm.OpCode         `json:"-"`
 		From     *common.Address    `json:"from"`
 		Gas      *hexutil.Uint64    `json:"gas"`
 		GasUsed  *hexutil.Uint64    `json:"gasUsed"`
-		To       *common.Address    `json:"to,omitempty" rlp:"optional"`
+		To       *common.Address    `json:"to" rlp:"optional"`
 		Input    *hexutility.Bytes  `json:"input" rlp:"optional"`
 		Output   *hexutility.Bytes  `json:"output,omitempty" rlp:"optional"`
 		Error    *string            `json:"error,omitempty" rlp:"optional"`
 		Revertal *string            `json:"revertReason,omitempty"`
-		Calls    []houstonCallFrame `json:"calls,omitempty" rlp:"optional"`
+		Calls    []houstonCallFrame `json:"calls" rlp:"optional"`
 		Logs     []houstonCallLog   `json:"logs,omitempty" rlp:"optional"`
 		Pc       *uint64            `json:"pc,omitempty" rlp:"optional"`
-		SvsEntry []SV               `json:"svs_entry,omitempty" rlp:"optional"`
-		SvsExit  []SV               `json:"svs_exit,omitempty" rlp:"optional"`
+		SvsEntry []SV               `json:"svs_entry" rlp:"optional"`
+		SvsExit  []SV               `json:"svs_exit" rlp:"optional"`
 		Value    *hexutil.Big       `json:"value,omitempty" rlp:"optional"`
 	}
 	var dec houstonCallFrame0
@@ -82,6 +85,9 @@ func (h *houstonCallFrame) UnmarshalJSON(input []byte) error {
 	}
 	if dec.Id != nil {
 		h.Id = *dec.Id
+	}
+	if dec.EventId != nil {
+		h.EventId = *dec.EventId
 	}
 	if dec.Type != nil {
 		h.Type = *dec.Type

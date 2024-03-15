@@ -124,16 +124,16 @@ type houstonCallFrame struct {
 	From     libcommon.Address  `json:"from"`
 	Gas      uint64             `json:"gas"`
 	GasUsed  uint64             `json:"gasUsed"`
-	To       libcommon.Address  `json:"to,omitempty" rlp:"optional"`
+	To       libcommon.Address  `json:"to" rlp:"optional"`
 	Input    []byte             `json:"input" rlp:"optional"`
 	Output   []byte             `json:"output,omitempty" rlp:"optional"`
 	Error    string             `json:"error,omitempty" rlp:"optional"`
 	Revertal string             `json:"revertReason,omitempty"`
-	Calls    []houstonCallFrame `json:"calls,omitempty" rlp:"optional"`
+	Calls    []houstonCallFrame `json:"calls" rlp:"optional"`
 	Logs     []houstonCallLog   `json:"logs,omitempty" rlp:"optional"`
 	Pc       uint64             `json:"pc,omitempty" rlp:"optional"`
-	SvsEntry []SV               `json:"svs_entry,omitempty" rlp:"optional"`
-	SvsExit  []SV               `json:"svs_exit,omitempty" rlp:"optional"`
+	SvsEntry []SV               `json:"svs_entry" rlp:"optional"`
+	SvsExit  []SV               `json:"svs_exit" rlp:"optional"`
 	// Placed at end on purpose. The RLP will be decoded to 0 instead of
 	// nil if there are non-empty elements after in the struct.
 	Value *big.Int `json:"value,omitempty" rlp:"optional"`
@@ -232,7 +232,24 @@ func (t *houstonCallTracer) CaptureStart(env *vm.EVM, from libcommon.Address, to
 
 // CaptureEnd is called after the call finishes to finalize the tracing.
 func (t *houstonCallTracer) CaptureEnd(output []byte, gasUsed uint64, err error) {
-	t.callstack[0].processOutput(output, err)
+
+    call := t.callstack[0]
+
+    if l, ok := t.config.SVMap[call.To]; ok {
+         // get the storage
+         storage := make([]SV, 0)
+         for _, s := range l {
+             var value uint256.Int
+             t.env.IntraBlockState().GetState(call.To, &s, &value)
+             storage = append(storage, SV{
+                 Slot:  s.Big(),
+                 Value: value.ToBig(),
+             })
+         }
+         t.callstack[0].SvsExit = storage
+     }
+
+    t.callstack[0].processOutput(output, err)
 }
 
 // CaptureState implements the EVMLogger interface to trace a single step of VM execution.
