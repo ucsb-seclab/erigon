@@ -137,6 +137,7 @@ type houstonCallFrame struct {
 	// Placed at end on purpose. The RLP will be decoded to 0 instead of
 	// nil if there are non-empty elements after in the struct.
 	Value *big.Int `json:"value,omitempty" rlp:"optional"`
+	StorageAddress libcommon.Address `json:"storage_address"`
 }
 
 func (f houstonCallFrame) TypeString() string {
@@ -150,6 +151,8 @@ func (f *houstonCallFrame) processOutput(output []byte, err error) {
 		return
 	}
 	f.Error = err.Error()
+	
+	// Updating CREATE/CREATE2 "to" address
 	if f.Type == vm.CREATE || f.Type == vm.CREATE2 {
 		f.To = libcommon.Address{}
 	}
@@ -202,6 +205,7 @@ func (t *houstonCallTracer) CaptureStart(env *vm.EVM, from libcommon.Address, to
 		Pc:      0,
 		Value:   value.ToBig(),
 		EventId: 0,
+		StorageAddress: to,
 	}
 	if value != nil {
 		t.callstack[0].Value = value.ToBig()
@@ -212,19 +216,23 @@ func (t *houstonCallTracer) CaptureStart(env *vm.EVM, from libcommon.Address, to
 	t.nextCallId = 1
 	t.nextEventId = 1
 
-	// if this is in the sv_map, dump its storage
-	if l, ok := t.config.SVMap[to]; ok {
-		// get the storage
-		storage := make([]SV, 0)
-		for _, s := range l {
-			var value uint256.Int
-			env.IntraBlockState().GetState(to, &s, &value)
-			storage = append(storage, SV{
-				Slot:  s.Big(),
-				Value: value.ToBig(),
-			})
+	// if it was not a transaction that created a contract
+	if !create{
+
+		// if this is in the sv_map, dump its storage
+		if l, ok := t.config.SVMap[to]; ok {
+			// get the storage
+			storage := make([]SV, 0)
+			for _, s := range l {
+				var value uint256.Int
+				env.IntraBlockState().GetState(to, &s, &value)
+				storage = append(storage, SV{
+					Slot:  s.Big(),
+					Value: value.ToBig(),
+				})
+			}
+			t.callstack[0].SvsEntry = storage
 		}
-		t.callstack[0].SvsEntry = storage
 	}
 
 	t.env = env
@@ -235,19 +243,22 @@ func (t *houstonCallTracer) CaptureEnd(output []byte, gasUsed uint64, err error)
 
     call := t.callstack[0]
 
-    if l, ok := t.config.SVMap[call.To]; ok {
-         // get the storage
-         storage := make([]SV, 0)
-         for _, s := range l {
-             var value uint256.Int
-             t.env.IntraBlockState().GetState(call.To, &s, &value)
-             storage = append(storage, SV{
-                 Slot:  s.Big(),
-                 Value: value.ToBig(),
-             })
-         }
-         t.callstack[0].SvsExit = storage
-     }
+	if call.Type != vm.CREATE {
+
+		if l, ok := t.config.SVMap[call.To]; ok {
+			// get the storage
+			storage := make([]SV, 0)
+			for _, s := range l {
+				var value uint256.Int
+				t.env.IntraBlockState().GetState(call.To, &s, &value)
+				storage = append(storage, SV{
+					Slot:  s.Big(),
+					Value: value.ToBig(),
+				})
+			}
+			t.callstack[0].SvsExit = storage
+		}
+	}
 
     t.callstack[0].processOutput(output, err)
 }
@@ -293,19 +304,7 @@ func (t *houstonCallTracer) CaptureEnter(typ vm.OpCode, from libcommon.Address, 
 	}
 	t.callstack = append(t.callstack, call)
 
-	if l, ok := t.config.SVMap[to]; ok {
-		// get the storage
-		storage := make([]SV, 0)
-		for _, s := range l {
-			var value uint256.Int
-			t.env.IntraBlockState().GetState(to, &s, &value)
-			storage = append(storage, SV{
-				Slot:  s.Big(),
-				Value: value.ToBig(),
-			})
-		}
-		t.callstack[len(t.callstack)-1].SvsEntry = storage
-	}
+	// We delay the definition of svs_entry to the CaptureState (we need to know the storage address)
 }
 
 // CaptureExit is called when EVM exits a scope, even if the scope didn't
@@ -327,13 +326,15 @@ func (t *houstonCallTracer) CaptureExit(output []byte, gasUsed uint64, err error
 
 	call.GasUsed = gasUsed
 	call.processOutput(output, err)
+	
+	ref_addr = call.storageAddress
 
-	if l, ok := t.config.SVMap[call.To]; ok {
+	if l, ok := t.config.SVMap[ref_addr]; ok {
 		// get the storage
 		storage := make([]SV, 0)
 		for _, s := range l {
 			var value uint256.Int
-			t.env.IntraBlockState().GetState(call.To, &s, &value)
+			t.env.IntraBlockState().GetState(ref_addr, &s, &value)
 			storage = append(storage, SV{
 				Slot:  s.Big(),
 				Value: value.ToBig(),
@@ -402,32 +403,6 @@ type ShaActionMarshalling struct {
 	StorageAddress libcommon.Address
 }
 
-type SloadAction struct {
-	EventId        uint64            `json:"event_id"`
-	Key            *big.Int          `json:"key"`
-	Result         *big.Int          `json:"result"`
-	Pc             uint64            `json:"pc"`
-	Address        libcommon.Address `json:"address"`
-	StorageAddress libcommon.Address `json:"storage_address"`
-	Depth          int               `json:"depth"`
-	CallId         uint64            `json:"call_id"`
-	FID            hexutility.Bytes  `json:"fid"`
-}
-
-//go:generate go run github.com/fjl/gencodec -type SloadAction -field-override SloadActionMarshalling -out gen_houstonSloadAction_json.go
-
-type SloadActionMarshalling struct {
-	EventId        uint64
-	Key            *hexutil.Big
-	Result         *hexutil.Big
-	Pc             hexutil.Uint64
-	Address        libcommon.Address
-	StorageAddress libcommon.Address
-	Depth          int
-	CallId         uint64
-	FID            hexutility.Bytes
-}
-
 type SstoreAction struct {
 	EventId        uint64            `json:"event_id"`
 	Key            *big.Int          `json:"key"`
@@ -459,7 +434,6 @@ type SstoreActionMarshalling struct {
 type HoustonResult struct {
 	CallTracerResult json.RawMessage `json:"call_tracer_result"`
 	ShaActions       []ShaAction     `json:"sha_actions"`
-	SloadActions     []SloadAction   `json:"sload_actions"`
 	SstoreActions    []SstoreAction  `json:"sstore_actions"`
 }
 
@@ -468,12 +442,9 @@ type houstonTracer struct {
 	myhoustonCallTracer houstonCallTracer
 	grabShaResult       bool
 	shaPreimage         []byte
-	sloadKey            uint256.Int
-	grabSloadResult     bool
 	foundCall           bool
 	myError             bool
 	shaActions          []ShaAction
-	sloadActions        []SloadAction
 	sstoreActions       []SstoreAction
 }
 
@@ -507,7 +478,6 @@ func (t *houstonTracer) CaptureStart(env *vm.EVM, from libcommon.Address, to lib
 	t.myhoustonCallTracer.CaptureStart(env, from, to, precompile, create, input, gas, value, code)
 	t.env = env
 	t.grabShaResult = false
-	t.grabSloadResult = false
 	t.foundCall = false
 }
 
@@ -522,13 +492,40 @@ func (t *houstonTracer) CaptureState(pc uint64, op vm.OpCode, gas, cost uint64, 
 		// do nothing; we just hit a fault (out of gas, etc) so control flow just got whacky
 		t.myError = false
 		t.grabShaResult = false
-		t.grabSloadResult = false
 		return
 	}
 
 	if t.foundCall {
-		// Don't do the work if this was just a CALL and we don't have results to grab.
+		
 		t.foundCall = false
+		
+		// We'll stick the storageAddress to the currentCall in the callstack
+		currentCall = t.myhoustonCallTracer.callstack[len(t.myhoustonCallTracer.callstack)-1]
+
+		if op == vm.CREATE || op == vm.CREATE2 {
+			new_addr = scope.Contract.Address()
+			currentCall.To = new_addr
+			currentCall.StorageAddress = new_addr
+			return
+		}
+		
+		// Now that we know what is the reference address for the variables
+		// we can add them in the svs_enter
+		if l, ok := t.config.SVMap[ref_addr]; ok {
+			// get the storage
+			storage := make([]SV, 0)
+			for _, s := range l {
+				var value uint256.Int
+				t.env.IntraBlockState().GetState(ref_addr, &s, &value)
+				storage = append(storage, SV{
+					Slot:  s.Big(),
+					Value: value.ToBig(),
+				})
+			}
+			t.myhoustonCallTracer.callstack[len(t.myhoustonCallTracer.callstack)-1].SvsEntry = storage
+		}
+		
+		// We are done here :)
 		return
 	}
 
@@ -555,27 +552,7 @@ func (t *houstonTracer) CaptureState(pc uint64, op vm.OpCode, gas, cost uint64, 
 		})
 
 		t.grabShaResult = false
-	} else if t.grabSloadResult {
-		event_id := t.myhoustonCallTracer.nextEventId
-		t.myhoustonCallTracer.nextEventId++
-
-		sload_result := scope.Stack.Peek().Bytes()
-		sload_key := t.sloadKey
-
-		t.sloadActions = append(t.sloadActions, SloadAction{
-			EventId:        event_id,
-			Key:            sload_key.ToBig(),
-			Result:         new(big.Int).SetBytes(sload_result),
-			Pc:             pc - 1,
-			Address:        currentCodeAddress,
-			StorageAddress: currentStorageAddress,
-			Depth:          depth,
-			CallId:         currentCallId,
-			FID:            currentCall.Input[:min(len(currentCall.Input), 4)],
-		})
-
-		t.grabSloadResult = false
-	}
+	} 
 
 	if op == vm.KECCAK256 {
 		offset := scope.Stack.Data[len(scope.Stack.Data)-1]
@@ -585,11 +562,8 @@ func (t *houstonTracer) CaptureState(pc uint64, op vm.OpCode, gas, cost uint64, 
 		preimage := scope.Memory.GetCopy(int64(offset.Uint64()), int64(size.Uint64()))
 		t.shaPreimage = preimage
 		t.grabShaResult = true
-	} else if op == vm.SLOAD {
-		key := scope.Stack.Data[len(scope.Stack.Data)-1]
-		t.sloadKey = key
-		t.grabSloadResult = true
-	} else if op == vm.SSTORE {
+	} 
+	else if op == vm.SSTORE {
 		key := scope.Stack.Data[len(scope.Stack.Data)-1]
 		value := scope.Stack.Data[len(scope.Stack.Data)-2]
 		var oldValue uint256.Int
@@ -613,7 +587,6 @@ func (t *houstonTracer) CaptureState(pc uint64, op vm.OpCode, gas, cost uint64, 
 		})
 
 	}
-
 }
 
 func (t *houstonTracer) CaptureEnter(typ vm.OpCode, from libcommon.Address, to libcommon.Address, precompile, create bool, input []byte, gas uint64, value *uint256.Int, code []byte) {
@@ -645,7 +618,6 @@ func (t *houstonTracer) GetResult() (json.RawMessage, error) {
 	result := HoustonResult{
 		CallTracerResult: callTracerResult,
 		ShaActions:       t.shaActions,
-		SloadActions:     t.sloadActions,
 		SstoreActions:    t.sstoreActions,
 	}
 
