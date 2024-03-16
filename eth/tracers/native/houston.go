@@ -126,7 +126,6 @@ type houstonCallFrame struct {
 	GasUsed  uint64             `json:"gasUsed"`
 	To       libcommon.Address  `json:"to" rlp:"optional"`
 	Input    []byte             `json:"input" rlp:"optional"`
-	Output   []byte             `json:"output,omitempty" rlp:"optional"`
 	Error    string             `json:"error,omitempty" rlp:"optional"`
 	Revertal string             `json:"revertReason,omitempty"`
 	Calls    []houstonCallFrame `json:"calls" rlp:"optional"`
@@ -147,7 +146,6 @@ func (f houstonCallFrame) TypeString() string {
 func (f *houstonCallFrame) processOutput(output []byte, err error) {
 	output = libcommon.CopyBytes(output)
 	if err == nil {
-		f.Output = output
 		return
 	}
 	f.Error = err.Error()
@@ -159,7 +157,7 @@ func (f *houstonCallFrame) processOutput(output []byte, err error) {
 	if !errors.Is(err, vm.ErrExecutionReverted) || len(output) == 0 {
 		return
 	}
-	f.Output = output
+
 	if len(output) < 4 {
 		return
 	}
@@ -502,10 +500,11 @@ func (t *houstonTracer) CaptureState(pc uint64, op vm.OpCode, gas, cost uint64, 
 		// We'll stick the storageAddress to the currentCall in the callstack
 		currentCall = t.myhoustonCallTracer.callstack[len(t.myhoustonCallTracer.callstack)-1]
 
+		currentCall.StorageAddress = new_addr
+
 		if op == vm.CREATE || op == vm.CREATE2 {
 			new_addr = scope.Contract.Address()
 			currentCall.To = new_addr
-			currentCall.StorageAddress = new_addr
 			return
 		}
 		
