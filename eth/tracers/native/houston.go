@@ -172,7 +172,6 @@ type houstonCallFrameMarshaling struct {
 	GasUsed    hexutil.Uint64
 	Value      *hexutil.Big
 	Input      hexutility.Bytes
-	Output     hexutility.Bytes
 }
 
 type houstonCallTracer struct {
@@ -325,7 +324,7 @@ func (t *houstonCallTracer) CaptureExit(output []byte, gasUsed uint64, err error
 	call.GasUsed = gasUsed
 	call.processOutput(output, err)
 	
-	ref_addr = call.storageAddress
+	ref_addr := call.StorageAddress
 
 	if l, ok := t.config.SVMap[ref_addr]; ok {
 		// get the storage
@@ -498,24 +497,22 @@ func (t *houstonTracer) CaptureState(pc uint64, op vm.OpCode, gas, cost uint64, 
 		t.foundCall = false
 		
 		// We'll stick the storageAddress to the currentCall in the callstack
-		currentCall = t.myhoustonCallTracer.callstack[len(t.myhoustonCallTracer.callstack)-1]
-
-		currentCall.StorageAddress = new_addr
+		currentCall := t.myhoustonCallTracer.callstack[len(t.myhoustonCallTracer.callstack)-1]
+		currentCall.StorageAddress = scope.Contract.Address()
 
 		if op == vm.CREATE || op == vm.CREATE2 {
-			new_addr = scope.Contract.Address()
-			currentCall.To = new_addr
+			currentCall.To = currentCall.StorageAddress
 			return
 		}
 		
 		// Now that we know what is the reference address for the variables
 		// we can add them in the svs_enter
-		if l, ok := t.config.SVMap[ref_addr]; ok {
+		if l, ok := t.config.SVMap[currentCall.StorageAddress]; ok {
 			// get the storage
 			storage := make([]SV, 0)
 			for _, s := range l {
 				var value uint256.Int
-				t.env.IntraBlockState().GetState(ref_addr, &s, &value)
+				t.env.IntraBlockState().GetState(currentCall.StorageAddress, &s, &value)
 				storage = append(storage, SV{
 					Slot:  s.Big(),
 					Value: value.ToBig(),
@@ -561,8 +558,7 @@ func (t *houstonTracer) CaptureState(pc uint64, op vm.OpCode, gas, cost uint64, 
 		preimage := scope.Memory.GetCopy(int64(offset.Uint64()), int64(size.Uint64()))
 		t.shaPreimage = preimage
 		t.grabShaResult = true
-	} 
-	else if op == vm.SSTORE {
+	} else if op == vm.SSTORE {
 		key := scope.Stack.Data[len(scope.Stack.Data)-1]
 		value := scope.Stack.Data[len(scope.Stack.Data)-2]
 		var oldValue uint256.Int
