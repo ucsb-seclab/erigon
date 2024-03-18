@@ -326,18 +326,24 @@ func (t *houstonCallTracer) CaptureExit(output []byte, gasUsed uint64, err error
 
 	ref_addr := call.StorageAddress
 
-	if l, ok := t.config.SVMap[call.To]; ok {
-		// get the storage
-		storage := make([]SV, 0)
-		for _, s := range l {
-			var value uint256.Int
-			t.env.IntraBlockState().GetState(ref_addr, &s, &value)
-			storage = append(storage, SV{
-				Slot:  s.Big(),
-				Value: value.ToBig(),
-			})
+	if call.Type != vm.CREATE && call.Type != vm.CREATE2 {
+		// IMPORTANT: access the map with the CODE_ADDRESS
+		// but GetState with the STORAGE_ADDRESS.
+		// The Storage Layout report is linked to the code address
+		// if the storage address is a proxy.
+		if l, ok := t.config.SVMap[call.To]; ok {
+			// get the storage
+			storage := make([]SV, 0)
+			for _, s := range l {
+				var value uint256.Int
+				t.env.IntraBlockState().GetState(ref_addr, &s, &value)
+				storage = append(storage, SV{
+					Slot:  s.Big(),
+					Value: value.ToBig(),
+				})
+			}
+			call.SvsExit = storage
 		}
-		call.SvsExit = storage
 	}
 
 	t.callstack[size-1].Calls = append(t.callstack[size-1].Calls, call)
