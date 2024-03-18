@@ -149,7 +149,7 @@ func (f *houstonCallFrame) processOutput(output []byte, err error) {
 		return
 	}
 	f.Error = err.Error()
-	
+
 	// Updating CREATE/CREATE2 "to" address
 	if f.Type == vm.CREATE || f.Type == vm.CREATE2 {
 		f.To = libcommon.Address{}
@@ -323,10 +323,10 @@ func (t *houstonCallTracer) CaptureExit(output []byte, gasUsed uint64, err error
 
 	call.GasUsed = gasUsed
 	call.processOutput(output, err)
-	
+
 	ref_addr := call.StorageAddress
 
-	if l, ok := t.config.SVMap[ref_addr]; ok {
+	if l, ok := t.config.SVMap[call.To]; ok {
 		// get the storage
 		storage := make([]SV, 0)
 		for _, s := range l {
@@ -493,9 +493,9 @@ func (t *houstonTracer) CaptureState(pc uint64, op vm.OpCode, gas, cost uint64, 
 	}
 
 	if t.foundCall {
-		
+
 		t.foundCall = false
-		
+
 		// We'll stick the storageAddress to the currentCall in the callstack
 		currentCall := t.myhoustonCallTracer.callstack[len(t.myhoustonCallTracer.callstack)-1]
 		currentCall.StorageAddress = scope.Contract.Address()
@@ -504,10 +504,10 @@ func (t *houstonTracer) CaptureState(pc uint64, op vm.OpCode, gas, cost uint64, 
 			currentCall.To = currentCall.StorageAddress
 			return
 		}
-		
+
 		// Now that we know what is the reference address for the variables
 		// we can add them in the svs_enter
-		if l, ok := t.config.SVMap[currentCall.StorageAddress]; ok {
+		if l, ok := t.config.SVMap[currentCall.To]; ok {
 			// get the storage
 			storage := make([]SV, 0)
 			for _, s := range l {
@@ -520,7 +520,7 @@ func (t *houstonTracer) CaptureState(pc uint64, op vm.OpCode, gas, cost uint64, 
 			}
 			t.myhoustonCallTracer.callstack[len(t.myhoustonCallTracer.callstack)-1].SvsEntry = storage
 		}
-		
+
 		// We are done here :)
 		return
 	}
@@ -548,7 +548,7 @@ func (t *houstonTracer) CaptureState(pc uint64, op vm.OpCode, gas, cost uint64, 
 		})
 
 		t.grabShaResult = false
-	} 
+	}
 
 	if op == vm.KECCAK256 {
 		offset := scope.Stack.Data[len(scope.Stack.Data)-1]
