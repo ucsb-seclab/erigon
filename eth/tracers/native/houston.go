@@ -19,7 +19,7 @@ package native
 import (
 	"encoding/json"
 	"errors"
-	//"fmt"
+	"fmt"
 	"math/big"
 	"os"
 	"sync/atomic"
