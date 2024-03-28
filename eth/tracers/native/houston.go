@@ -19,7 +19,7 @@ package native
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
+	//"fmt"
 	"math/big"
 	"os"
 	"sync/atomic"
@@ -79,9 +79,9 @@ func getHoustonConfiguration(fileName string) (*houstonConfiguration, error) {
 		}
 	}
 
-	for address, _ := range config.SVMap {
-		fmt.Printf("Address: %v\n", address)
-	}
+	//for address, _ := range config.SVMap {
+	//	fmt.Printf("Address: %v\n", address)
+	//}
 
 	// Cache the configuration
 	cachedHoustonConfigurations[fileName] = &config
@@ -204,6 +204,9 @@ func (t *houstonCallTracer) CaptureStart(env *vm.EVM, from libcommon.Address, to
 		EventId: 0,
 		StorageAddress: to,
 	}
+
+	//fmt.Printf("Start StorageAddress %v\n", to)
+
 	if value != nil {
 		t.callstack[0].Value = value.ToBig()
 	}
@@ -241,7 +244,6 @@ func (t *houstonCallTracer) CaptureEnd(output []byte, gasUsed uint64, err error)
     call := t.callstack[0]
 
 	if call.Type != vm.CREATE {
-
 		if l, ok := t.config.SVMap[call.To]; ok {
 			// get the storage
 			storage := make([]SV, 0)
@@ -325,6 +327,8 @@ func (t *houstonCallTracer) CaptureExit(output []byte, gasUsed uint64, err error
 	call.processOutput(output, err)
 
 	ref_addr := call.StorageAddress
+
+	//fmt.Printf("Exit StorageAddress %v\n", ref_addr)
 
 	if call.Type != vm.CREATE && call.Type != vm.CREATE2 {
 		// IMPORTANT: access the map with the CODE_ADDRESS
@@ -503,8 +507,11 @@ func (t *houstonTracer) CaptureState(pc uint64, op vm.OpCode, gas, cost uint64, 
 		t.foundCall = false
 
 		// We'll stick the storageAddress to the currentCall in the callstack
+
+		t.myhoustonCallTracer.callstack[len(t.myhoustonCallTracer.callstack)-1].StorageAddress = scope.Contract.Address()
 		currentCall := t.myhoustonCallTracer.callstack[len(t.myhoustonCallTracer.callstack)-1]
-		currentCall.StorageAddress = scope.Contract.Address()
+
+		//fmt.Printf("Inside CaptureState (foundCall), StorageAddress %v\n", currentCall.StorageAddress)
 
 		if op == vm.CREATE || op == vm.CREATE2 {
 			currentCall.To = currentCall.StorageAddress
@@ -513,7 +520,7 @@ func (t *houstonTracer) CaptureState(pc uint64, op vm.OpCode, gas, cost uint64, 
 
 		// Now that we know what is the reference address for the variables
 		// we can add them in the svs_enter
-		if l, ok := t.config.SVMap[currentCall.To]; ok {
+		if l, ok := t.myhoustonCallTracer.config.SVMap[currentCall.To]; ok {
 			// get the storage
 			storage := make([]SV, 0)
 			for _, s := range l {
@@ -535,6 +542,8 @@ func (t *houstonTracer) CaptureState(pc uint64, op vm.OpCode, gas, cost uint64, 
 	currentCallId := currentCall.Id
 	currentCodeAddress := *scope.Contract.CodeAddr
 	currentStorageAddress := scope.Contract.Address()
+
+	//fmt.Printf("Inside CaptureState, StorageAddress %v\n", currentStorageAddress)
 
 	if t.grabShaResult {
 		event_id := t.myhoustonCallTracer.nextEventId
